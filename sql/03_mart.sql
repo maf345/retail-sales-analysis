@@ -1,0 +1,152 @@
+-- Star schema MART. Grain:
+--   fact_sales       = one row per Sale_ID
+--   fact_sales_items = one row per Item_ID
+-- Guests have NULL customer_sk. Cashier lives on dim_store (1:1 in this extract).
+
+USE DATABASE RETAIL_SALES;
+USE SCHEMA MART;
+
+CREATE OR REPLACE TABLE MART.DIM_DATE AS
+SELECT
+    d                                           AS DATE_KEY,
+    YEAR(d)                                     AS YEAR,
+    QUARTER(d)                                  AS QUARTER,
+    MONTH(d)                                    AS MONTH,
+    MONTHNAME(d)                                AS MONTH_NAME,
+    WEEKISO(d)                                  AS ISO_WEEK,
+    DAY(d)                                      AS DAY_OF_MONTH,
+    DAYOFWEEKISO(d)                             AS DOW_ISO,
+    DAYNAME(d)                                  AS DAY_NAME,
+    IFF(DAYOFWEEKISO(d) >= 6, TRUE, FALSE)      AS IS_WEEKEND,
+    HOUR(d)                                     AS HOUR  -- always 0 for date grain
+FROM (
+    SELECT DATEADD(DAY, SEQ4(), DATE '2025-01-01') AS d
+    FROM TABLE(GENERATOR(ROWCOUNT => 800))
+)
+WHERE d <= DATE '2026-12-31';
+
+CREATE OR REPLACE TABLE MART.DIM_STORE AS
+SELECT
+    STORE_ID                                    AS STORE_SK,
+    STORE_ID,
+    STORE_NAME,
+    CITY,
+    STATE,
+    REGION,
+    CASHIER_NAME,
+    CURRENT_TIMESTAMP()                         AS _BUILT_AT
+FROM (
+    SELECT *,
+           ROW_NUMBER() OVER (PARTITION BY STORE_ID ORDER BY UPDATE_TS DESC) AS RN
+    FROM STAGING.V_SALES_HEADER
+    WHERE STORE_ID IS NOT NULL
+)
+WHERE RN = 1;
+
+CREATE OR REPLACE TABLE MART.DIM_PRODUCT AS
+SELECT
+    PRODUCT_ID                                  AS PRODUCT_SK,
+    PRODUCT_ID,
+    PRODUCT_NAME,
+    CATEGORY,
+    CURRENT_TIMESTAMP()                         AS _BUILT_AT
+FROM (
+    SELECT *,
+           ROW_NUMBER() OVER (PARTITION BY PRODUCT_ID ORDER BY UPDATE_TS DESC) AS RN
+    FROM STAGING.V_SALES_ITEMS
+    WHERE PRODUCT_ID IS NOT NULL
+)
+WHERE RN = 1;
+
+CREATE OR REPLACE TABLE MART.DIM_PAYMENT AS
+SELECT
+    HASH(PAYMENT_TYPE)                          AS PAYMENT_SK,
+    PAYMENT_TYPE
+FROM (
+    SELECT DISTINCT PAYMENT_TYPE
+    FROM STAGING.V_SALES_HEADER
+    WHERE PAYMENT_TYPE IS NOT NULL
+);
+
+CREATE OR REPLACE TABLE MART.DIM_CUSTOMER AS
+SELECT
+    C.CUSTOMER_ID                               AS CUSTOMER_SK,
+    C.CUSTOMER_ID,
+    C.CUSTOMER_NAME,
+    C.GENDER,
+    C.AGE,
+    CASE
+        WHEN C.AGE < 25 THEN '18-24'
+        WHEN C.AGE < 35 THEN '25-34'
+        WHEN C.AGE < 45 THEN '35-44'
+        WHEN C.AGE < 55 THEN '45-54'
+        WHEN C.AGE < 65 THEN '55-64'
+        ELSE '65+'
+    END                                         AS AGE_BAND,
+    P.PHONE_NO                                  AS ACTIVE_PHONE,
+    C._LOAD_DATE
+FROM STAGING.V_CUSTOMER C
+LEFT JOIN STAGING.V_CUSTOMER_PHONE P
+  ON C.CUSTOMER_ID = P.CUSTOMER_ID
+ AND P.PHONE_STATUS = 'Active';
+
+CREATE OR REPLACE TABLE MART.DIM_CUSTOMER_PHONE AS
+SELECT
+    CUSTOMER_ID,
+    PHONE_NO,
+    PHONE_STATUS,
+    _LOAD_DATE
+FROM STAGING.V_CUSTOMER_PHONE;
+
+CREATE OR REPLACE TABLE MART.FACT_SALES AS
+SELECT
+    H.SALE_ID,
+    H.SALE_TS,
+    H.SALE_DATE,
+    DATE_PART('HOUR', H.SALE_TS)                AS SALE_HOUR,
+    DAYNAME(H.SALE_TS)                          AS SALE_DOW,
+    H.STORE_ID,
+    H.CUSTOMER_ID,                              -- NULL for Guest
+    H.CUSTOMER_TYPE,
+    H.PAYMENT_TYPE,
+    H.CASHIER_NAME,
+    H.UPDATE_TS,
+    IFF(I.SALE_ID IS NOT NULL, TRUE, FALSE)     AS HAS_LINE_ITEMS,
+    I.LINE_COUNT,
+    I.BASKET_QTY,
+    I.BASKET_VALUE,
+    I.BASKET_DISCOUNT_AMT,
+    H._LOAD_DATE
+FROM STAGING.V_SALES_HEADER H
+LEFT JOIN (
+    SELECT
+        SALE_ID,
+        COUNT(*)                                AS LINE_COUNT,
+        SUM(QUANTITY)                           AS BASKET_QTY,
+        SUM(TOTAL_VALUE)                        AS BASKET_VALUE,
+        SUM(UNIT_PRICE_USD * QUANTITY * DISCOUNT_PCT / 100) AS BASKET_DISCOUNT_AMT
+    FROM STAGING.V_SALES_ITEMS
+    GROUP BY SALE_ID
+) I ON H.SALE_ID = I.SALE_ID;
+
+CREATE OR REPLACE TABLE MART.FACT_SALES_ITEMS AS
+SELECT
+    I.ITEM_ID,
+    I.SALE_ID,
+    H.SALE_TS,
+    H.SALE_DATE,
+    H.STORE_ID,
+    H.CUSTOMER_ID,
+    H.CUSTOMER_TYPE,
+    H.PAYMENT_TYPE,
+    I.PRODUCT_ID,
+    I.UNIT_PRICE_USD,
+    I.QUANTITY,
+    I.DISCOUNT_PCT,
+    I.TOTAL_VALUE,
+    I.UNIT_PRICE_USD * I.QUANTITY * I.DISCOUNT_PCT / 100 AS DISCOUNT_AMT,
+    I.UPDATE_TS,
+    I._LOAD_DATE
+FROM STAGING.V_SALES_ITEMS I
+INNER JOIN STAGING.V_SALES_HEADER H
+    ON I.SALE_ID = H.SALE_ID;

@@ -1,0 +1,223 @@
+-- Reporting-ready tables for Tableau (and time intelligence).
+USE DATABASE RETAIL_SALES;
+USE SCHEMA MART;
+
+SET SNAPSHOT_DATE = (SELECT MAX(SALE_DATE) FROM MART.FACT_SALES);
+
+CREATE OR REPLACE TABLE MART.MART_KPI_SNAPSHOT AS
+SELECT
+    $SNAPSHOT_DATE                                                  AS SNAPSHOT_DATE,
+    COUNT(*)                                                        AS TXN_COUNT,
+    COUNT(DISTINCT STORE_ID)                                        AS STORE_COUNT,
+    SUM(IFF(HAS_LINE_ITEMS, BASKET_VALUE, 0))                       AS REVENUE_WITH_ITEMS,
+    AVG(IFF(HAS_LINE_ITEMS, BASKET_VALUE, NULL))                    AS AVG_BASKET_VALUE,
+    AVG(IFF(HAS_LINE_ITEMS, BASKET_QTY, NULL))                      AS AVG_BASKET_SIZE,
+    AVG(IFF(HAS_LINE_ITEMS, LINE_COUNT, NULL))                      AS AVG_LINES_PER_BASKET,
+    SUM(IFF(HAS_LINE_ITEMS, 1, 0)) / COUNT(*)                       AS ITEM_COVERAGE_PCT,
+    SUM(IFF(CUSTOMER_TYPE = 'Member', 1, 0))                        AS MEMBER_TXNS,
+    SUM(IFF(CUSTOMER_TYPE = 'Guest', 1, 0))                         AS GUEST_TXNS
+FROM MART.FACT_SALES;
+
+CREATE OR REPLACE TABLE MART.MART_DAILY_SALES AS
+SELECT
+    F.SALE_DATE,
+    D.YEAR,
+    D.QUARTER,
+    D.MONTH,
+    D.MONTH_NAME,
+    F.STORE_ID,
+    S.STORE_NAME,
+    S.REGION,
+    S.CITY,
+    F.CUSTOMER_TYPE,
+    F.PAYMENT_TYPE,
+    COUNT(*)                                                        AS TXN_COUNT,
+    SUM(IFF(F.HAS_LINE_ITEMS, 1, 0))                                AS TXN_WITH_ITEMS,
+    SUM(COALESCE(F.BASKET_VALUE, 0))                                AS REVENUE,
+    SUM(COALESCE(F.BASKET_QTY, 0))                                  AS UNITS,
+    SUM(COALESCE(F.BASKET_DISCOUNT_AMT, 0))                         AS DISCOUNT_AMT,
+    AVG(F.BASKET_VALUE)                                             AS AVG_BASKET_VALUE
+FROM MART.FACT_SALES F
+JOIN MART.DIM_DATE D ON F.SALE_DATE = D.DATE_KEY
+JOIN MART.DIM_STORE S ON F.STORE_ID = S.STORE_ID
+GROUP BY 1,2,3,4,5,6,7,8,9,10,11;
+
+CREATE OR REPLACE TABLE MART.MART_TIME_INTEL AS
+WITH DAILY AS (
+    SELECT SALE_DATE, SUM(COALESCE(BASKET_VALUE, 0)) AS REVENUE, COUNT(*) AS TXN_COUNT
+    FROM MART.FACT_SALES
+    GROUP BY SALE_DATE
+)
+SELECT
+    SALE_DATE,
+    REVENUE,
+    TXN_COUNT,
+    SUM(REVENUE) OVER (PARTITION BY YEAR(SALE_DATE) ORDER BY SALE_DATE)              AS YTD_REVENUE,
+    SUM(REVENUE) OVER (PARTITION BY YEAR(SALE_DATE), MONTH(SALE_DATE) ORDER BY SALE_DATE) AS MTD_REVENUE,
+    SUM(REVENUE) OVER (PARTITION BY YEAR(SALE_DATE), QUARTER(SALE_DATE) ORDER BY SALE_DATE) AS QTD_REVENUE,
+    LAG(REVENUE, 1) OVER (ORDER BY SALE_DATE)                                        AS PREV_DAY_REVENUE,
+    LAG(REVENUE, 1) OVER (PARTITION BY MONTH(SALE_DATE), DAY(SALE_DATE) ORDER BY YEAR(SALE_DATE)) AS PREV_YEAR_DAY_REVENUE
+FROM DAILY;
+
+CREATE OR REPLACE TABLE MART.MART_HOURLY_DOW AS
+SELECT
+    SALE_DOW,
+    SALE_HOUR,
+    STORE_ID,
+    CUSTOMER_TYPE,
+    COUNT(*)                                                        AS TXN_COUNT,
+    SUM(COALESCE(BASKET_VALUE, 0))                                  AS REVENUE
+FROM MART.FACT_SALES
+GROUP BY 1,2,3,4;
+
+CREATE OR REPLACE TABLE MART.MART_PRODUCT_PERF AS
+SELECT
+    I.PRODUCT_ID,
+    P.PRODUCT_NAME,
+    P.CATEGORY,
+    I.SALE_DATE,
+    I.STORE_ID,
+    I.CUSTOMER_TYPE,
+    SUM(I.QUANTITY)                                                 AS UNITS,
+    SUM(I.TOTAL_VALUE)                                              AS REVENUE,
+    SUM(I.DISCOUNT_AMT)                                             AS DISCOUNT_AMT,
+    AVG(I.DISCOUNT_PCT)                                             AS AVG_DISCOUNT_PCT,
+    COUNT(*)                                                        AS LINE_COUNT
+FROM MART.FACT_SALES_ITEMS I
+JOIN MART.DIM_PRODUCT P ON I.PRODUCT_ID = P.PRODUCT_ID
+GROUP BY 1,2,3,4,5,6;
+
+CREATE OR REPLACE TABLE MART.MART_DISCOUNT_BAND AS
+SELECT
+    CASE
+        WHEN DISCOUNT_PCT = 0 THEN '0%'
+        WHEN DISCOUNT_PCT <= 5 THEN '5%'
+        WHEN DISCOUNT_PCT <= 10 THEN '10%'
+        ELSE '15%+'
+    END                                                             AS DISCOUNT_BAND,
+    CATEGORY,
+    COUNT(*)                                                        AS LINE_COUNT,
+    SUM(QUANTITY)                                                   AS UNITS,
+    SUM(TOTAL_VALUE)                                                AS REVENUE,
+    SUM(DISCOUNT_AMT)                                               AS DISCOUNT_AMT,
+    AVG(TOTAL_VALUE)                                                AS AVG_LINE_VALUE
+FROM MART.FACT_SALES_ITEMS I
+JOIN MART.DIM_PRODUCT P ON I.PRODUCT_ID = P.PRODUCT_ID
+GROUP BY 1,2;
+
+CREATE OR REPLACE TABLE MART.MART_CUSTOMER_RFM AS
+WITH BASE AS (
+    SELECT
+        CUSTOMER_ID,
+        COUNT(*)                                                    AS FREQUENCY,
+        SUM(COALESCE(BASKET_VALUE, 0))                              AS MONETARY,
+        MAX(SALE_DATE)                                              AS LAST_PURCHASE_DATE,
+        MIN(SALE_DATE)                                              AS FIRST_PURCHASE_DATE,
+        DATEDIFF('DAY', MAX(SALE_DATE), $SNAPSHOT_DATE)             AS RECENCY_DAYS,
+        DATEDIFF('DAY', MIN(SALE_DATE), MAX(SALE_DATE))             AS TENURE_DAYS
+    FROM MART.FACT_SALES
+    WHERE CUSTOMER_TYPE = 'Member'
+      AND CUSTOMER_ID IS NOT NULL
+    GROUP BY CUSTOMER_ID
+)
+SELECT
+    B.*,
+    B.FREQUENCY * (B.MONETARY / NULLIF(B.FREQUENCY, 0))             AS CLV_PROXY,
+    IFF(B.RECENCY_DAYS > 90, TRUE, FALSE)                           AS IS_CHURNED_90D,
+    NTILE(5) OVER (ORDER BY B.RECENCY_DAYS DESC)                    AS R_SCORE,
+    NTILE(5) OVER (ORDER BY B.FREQUENCY)                            AS F_SCORE,
+    NTILE(5) OVER (ORDER BY B.MONETARY)                             AS M_SCORE
+FROM BASE B;
+
+CREATE OR REPLACE TABLE MART.MART_MARKET_BASKET AS
+WITH PAIRS AS (
+    SELECT
+        A.PRODUCT_ID AS PRODUCT_A,
+        B.PRODUCT_ID AS PRODUCT_B,
+        COUNT(DISTINCT A.SALE_ID) AS PAIR_BASKETS
+    FROM MART.FACT_SALES_ITEMS A
+    JOIN MART.FACT_SALES_ITEMS B
+      ON A.SALE_ID = B.SALE_ID
+     AND A.PRODUCT_ID < B.PRODUCT_ID
+    GROUP BY 1,2
+),
+PROD AS (
+    SELECT PRODUCT_ID, COUNT(DISTINCT SALE_ID) AS BASKETS
+    FROM MART.FACT_SALES_ITEMS
+    GROUP BY 1
+),
+TOT AS (
+    SELECT COUNT(DISTINCT SALE_ID) AS TOTAL_BASKETS FROM MART.FACT_SALES_ITEMS
+)
+SELECT
+    P.PRODUCT_A,
+    DA.PRODUCT_NAME AS PRODUCT_A_NAME,
+    P.PRODUCT_B,
+    DB.PRODUCT_NAME AS PRODUCT_B_NAME,
+    P.PAIR_BASKETS,
+    P.PAIR_BASKETS / T.TOTAL_BASKETS                                AS SUPPORT,
+    P.PAIR_BASKETS / PA.BASKETS                                     AS CONFIDENCE_A_TO_B,
+    P.PAIR_BASKETS / PB.BASKETS                                     AS CONFIDENCE_B_TO_A,
+    (P.PAIR_BASKETS / T.TOTAL_BASKETS)
+        / ((PA.BASKETS / T.TOTAL_BASKETS) * (PB.BASKETS / T.TOTAL_BASKETS)) AS LIFT
+FROM PAIRS P
+JOIN PROD PA ON P.PRODUCT_A = PA.PRODUCT_ID
+JOIN PROD PB ON P.PRODUCT_B = PB.PRODUCT_ID
+CROSS JOIN TOT T
+JOIN MART.DIM_PRODUCT DA ON P.PRODUCT_A = DA.PRODUCT_ID
+JOIN MART.DIM_PRODUCT DB ON P.PRODUCT_B = DB.PRODUCT_ID
+QUALIFY ROW_NUMBER() OVER (ORDER BY LIFT DESC, PAIR_BASKETS DESC) <= 50;
+
+CREATE OR REPLACE TABLE MART.MART_UNUSUAL_TXN AS
+WITH STATS AS (
+    SELECT
+        AVG(BASKET_VALUE) AS MU,
+        STDDEV(BASKET_VALUE) AS SD
+    FROM MART.FACT_SALES
+    WHERE HAS_LINE_ITEMS
+)
+SELECT
+    F.SALE_ID,
+    F.SALE_TS,
+    F.STORE_ID,
+    F.CUSTOMER_TYPE,
+    F.PAYMENT_TYPE,
+    F.BASKET_VALUE,
+    F.BASKET_QTY,
+    F.LINE_COUNT,
+    F.BASKET_DISCOUNT_AMT,
+    (F.BASKET_VALUE - S.MU) / NULLIF(S.SD, 0)                       AS VALUE_ZSCORE,
+    IFF(ABS((F.BASKET_VALUE - S.MU) / NULLIF(S.SD, 0)) >= 3, TRUE, FALSE) AS IS_VALUE_OUTLIER,
+    IFF(F.BASKET_DISCOUNT_AMT / NULLIF(F.BASKET_VALUE + F.BASKET_DISCOUNT_AMT, 0) >= 0.12
+        AND F.BASKET_QTY >= 20, TRUE, FALSE)                        AS IS_HIGH_DISCOUNT_BULK
+FROM MART.FACT_SALES F
+CROSS JOIN STATS S
+WHERE F.HAS_LINE_ITEMS
+  AND (
+        ABS((F.BASKET_VALUE - S.MU) / NULLIF(S.SD, 0)) >= 3
+     OR (F.BASKET_DISCOUNT_AMT / NULLIF(F.BASKET_VALUE + F.BASKET_DISCOUNT_AMT, 0) >= 0.12
+         AND F.BASKET_QTY >= 20)
+  );
+
+CREATE OR REPLACE TABLE MART.MART_FEED_COMPLETENESS AS
+SELECT
+    SALE_DATE,
+    STORE_ID,
+    COUNT(*)                                                        AS TXN_COUNT,
+    SUM(IFF(HAS_LINE_ITEMS, 1, 0))                                  AS TXN_WITH_ITEMS,
+    SUM(IFF(HAS_LINE_ITEMS, 0, 1))                                  AS TXN_MISSING_ITEMS,
+    SUM(IFF(HAS_LINE_ITEMS, 1, 0)) / COUNT(*)                       AS ITEM_COVERAGE_PCT
+FROM MART.FACT_SALES
+GROUP BY 1,2;
+
+CREATE OR REPLACE TABLE MART.MART_MEMBER_VS_GUEST AS
+SELECT
+    CUSTOMER_TYPE,
+    COUNT(*)                                                        AS TXN_COUNT,
+    COUNT(DISTINCT STORE_ID)                                        AS STORES,
+    SUM(COALESCE(BASKET_VALUE, 0))                                  AS REVENUE,
+    AVG(BASKET_VALUE)                                               AS AVG_BASKET_VALUE,
+    AVG(BASKET_QTY)                                                 AS AVG_BASKET_SIZE,
+    AVG(LINE_COUNT)                                                 AS AVG_LINES
+FROM MART.FACT_SALES
+GROUP BY 1;

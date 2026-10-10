@@ -1,0 +1,62 @@
+-- Clean RAW into typed STAGING. Re-runnable (CREATE OR REPLACE).
+-- Parsing of $ / pcs / % happens here so RAW stays an audit copy.
+
+USE DATABASE RETAIL_SALES;
+USE SCHEMA STAGING;
+
+CREATE OR REPLACE VIEW STAGING.V_SALES_HEADER AS
+SELECT
+    TRY_TO_NUMBER(SALE_ID)                              AS SALE_ID,
+    TRY_TO_TIMESTAMP_NTZ(SALE_DATE)                     AS SALE_TS,
+    CAST(TRY_TO_TIMESTAMP_NTZ(SALE_DATE) AS DATE)       AS SALE_DATE,
+    TRY_TO_NUMBER(STORE_ID)                             AS STORE_ID,
+    STORE_NAME,
+    CITY,
+    STATE,
+    REGION,
+    CASHIER_NAME,
+    PAYMENT_TYPE,
+    TRY_TO_NUMBER(CUSTOMER_ID_RAW)                      AS CUSTOMER_ID,
+    CUSTOMER_TYPE,
+    TRY_TO_TIMESTAMP_NTZ(UPDATE_DATE)                   AS UPDATE_TS,
+    _LOAD_DATE,
+    _FILE_NAME,
+    _INGESTED_AT
+FROM RAW.SALES_HEADER;
+
+CREATE OR REPLACE VIEW STAGING.V_SALES_ITEMS AS
+SELECT
+    TRY_TO_NUMBER(ITEM_ID)                              AS ITEM_ID,
+    TRY_TO_NUMBER(SALE_ID)                              AS SALE_ID,
+    TRY_TO_NUMBER(PRODUCT_ID)                           AS PRODUCT_ID,
+    PRODUCT_NAME,
+    CATEGORY,
+    TRY_TO_NUMBER(REGEXP_REPLACE(UNIT_PRICE_USD, '[^0-9.\\-]', '')) AS UNIT_PRICE_USD,
+    TRY_TO_NUMBER(REGEXP_REPLACE(QUANTITY, '[^0-9.\\-]', ''))       AS QUANTITY,
+    TRY_TO_NUMBER(REGEXP_REPLACE(DISCOUNT_PCT, '[^0-9.\\-]', ''))   AS DISCOUNT_PCT,
+    TRY_TO_NUMBER(TOTAL_VALUE)                          AS TOTAL_VALUE,
+    TRY_TO_TIMESTAMP_NTZ(UPDATE_DATE)                   AS UPDATE_TS,
+    _LOAD_DATE,
+    _FILE_NAME,
+    _INGESTED_AT
+FROM RAW.SALES_ITEMS;
+
+-- Flatten nested Phones array into a relational grain.
+CREATE OR REPLACE VIEW STAGING.V_CUSTOMER AS
+SELECT
+    C.CUSTOMER_ID,
+    C.PAYLOAD:Customer_Name::VARCHAR                    AS CUSTOMER_NAME,
+    C.PAYLOAD:Gender::VARCHAR                           AS GENDER,
+    C.PAYLOAD:Age::NUMBER                               AS AGE,
+    C._LOAD_DATE,
+    C._FILE_NAME
+FROM RAW.CUSTOMERS C;
+
+CREATE OR REPLACE VIEW STAGING.V_CUSTOMER_PHONE AS
+SELECT
+    C.CUSTOMER_ID,
+    F.VALUE:Phone_No::VARCHAR                           AS PHONE_NO,
+    F.VALUE:Status::VARCHAR                             AS PHONE_STATUS,
+    C._LOAD_DATE
+FROM RAW.CUSTOMERS C,
+     LATERAL FLATTEN(INPUT => C.PAYLOAD:Phones) F;

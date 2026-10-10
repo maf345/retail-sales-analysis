@@ -1,5 +1,5 @@
 -- RETAIL_SALES: database, schemas, RAW landing tables.
--- Hybrid ELT: files land as-is; business rules live in STAGING/MART.
+-- Hybrid ELT: files land as-is. Business rules live in STAGING/MART.
 
 CREATE DATABASE IF NOT EXISTS RETAIL_SALES;
 USE DATABASE RETAIL_SALES;

@@ -29,10 +29,22 @@ def connect():
 
 
 def run_sql_file(cur, path: Path) -> None:
-    sql = path.read_text(encoding="utf-8")
-    statements = [s.strip() for s in _split_sql(sql) if s.strip() and not s.strip().startswith("--")]
+    sql = _strip_comments(path.read_text(encoding="utf-8"))
+    statements = [s.strip() for s in _split_sql(sql) if s.strip()]
     for stmt in statements:
         cur.execute(stmt)
+
+
+def _strip_comments(sql: str) -> str:
+    """Drop full-line and trailing -- comments so a semicolon inside a comment cannot split SQL."""
+    kept = []
+    for line in sql.splitlines():
+        if line.strip().startswith("--"):
+            continue
+        if "--" in line:
+            line = line.split("--", 1)[0]
+        kept.append(line)
+    return "\n".join(kept)
 
 
 def _split_sql(sql: str) -> list[str]:
@@ -65,12 +77,16 @@ def bootstrap_and_load(raw: dict[str, pd.DataFrame], as_of_date: str) -> str:
         _replace_raw(cur, conn, "RAW.SALES_ITEMS", _items_for_sf(raw["items"]), as_of_date)
         _load_customers(cur, conn, raw["customers"], as_of_date)
 
-        cur.execute(
+        cur.executemany(
             """
             INSERT INTO RAW.LOAD_LOG (LOAD_DATE, SOURCE_NAME, FILE_NAME, ROW_COUNT, STATUS, MESSAGE)
-            SELECT %s, 'SALES_HEADER', 'Retail_Sales.xlsx', %s, 'SUCCESS', 'RAW replace for load date'
+            VALUES (%s, %s, %s, %s, 'SUCCESS', 'RAW replace for load date')
             """,
-            (as_of_date, len(raw["sales"])),
+            [
+                (as_of_date, "SALES_HEADER", "Retail_Sales.xlsx", len(raw["sales"])),
+                (as_of_date, "SALES_ITEMS", "Retail_Items.xlsx", len(raw["items"])),
+                (as_of_date, "CUSTOMERS", "Customers.json", len(raw["customers"])),
+            ],
         )
 
         for name in ["02_staging.sql", "03_mart.sql", "04_analysis_mart.sql"]:

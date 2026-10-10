@@ -11,18 +11,20 @@ from __future__ import annotations
 import argparse
 import json
 import sys
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from etl.config import DOCS_DIR, ROOT as PROJECT_ROOT
+from etl.charts import render_charts
+from etl.config import DOCS_DIR
 from etl.dq import run_dq, write_dq_log
 from etl.export_extracts import export_extracts
 from etl.ingest import load_raw, resolve_as_of_date
 from etl.load_snowflake import snowflake_configured, bootstrap_and_load
+from etl.local_db import read_all_raw, upsert_raw, write_mart
 from etl.transform import build_mart
 
 
@@ -39,13 +41,18 @@ def main() -> None:
     as_of = resolve_as_of_date(args.as_of_date)
     print(f"As-of / landing date: {as_of}")
 
-    raw = load_raw(as_of)
+    raw_batch = load_raw(as_of)
+    db_path = upsert_raw(raw_batch, as_of)
+    raw = read_all_raw()
     print(
         f"RAW rows  sales={len(raw['sales']):,}  items={len(raw['items']):,}  "
-        f"customers={len(raw['customers']):,}"
+        f"customers={len(raw['customers']):,}  (this drop: "
+        f"{len(raw_batch['sales']):,} / {len(raw_batch['items']):,} / {len(raw_batch['customers']):,})"
     )
+    print(f"Local database: {db_path}")
 
     mart = build_mart(raw)
+    write_mart(mart)
     checks = run_dq(raw, mart)
     dq_path = write_dq_log(checks, as_of)
     print(f"DQ log: {dq_path}")
@@ -63,7 +70,8 @@ def main() -> None:
     sf_msg = "Snowflake skipped (no password in .env or --skip-snowflake)"
     if snowflake_configured() and not args.skip_snowflake:
         try:
-            sf_msg = bootstrap_and_load(raw, as_of)
+            sf_msg = bootstrap_and_load(raw_batch, as_of)
+            print(sf_msg)
         except Exception as exc:
             sf_msg = f"Snowflake load failed: {exc}"
             print(sf_msg)
@@ -77,7 +85,8 @@ def main() -> None:
     if not args.skip_pptx:
         from etl.build_pptx import build_pptx
 
-        pptx_path = build_pptx(findings)
+        chart_paths = render_charts(mart)
+        pptx_path = build_pptx(findings, chart_paths)
         print(f"PPT: {pptx_path}")
 
     print("Pipeline complete.")
@@ -121,7 +130,10 @@ def build_findings(mart: dict, checks, as_of: str) -> dict:
     )
     return {
         "as_of_date": as_of,
-        "generated_at": datetime.utcnow().isoformat(timespec="seconds") + "Z",
+        "sale_date_min": str(pd_ts(mart["fact_sales"]["SALE_DATE"].min()))[:10],
+        "sale_date_max": str(pd_ts(mart["fact_sales"]["SALE_DATE"].max()))[:10],
+        "parse_issues": mart["dq_parse_issues"].to_dict(orient="records"),
+        "generated_at": datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z"),
         "kpi": {
             "txn_count": int(kpi["TXN_COUNT"]),
             "revenue_with_items": float(kpi["REVENUE_WITH_ITEMS"]),
@@ -161,6 +173,12 @@ def build_findings(mart: dict, checks, as_of: str) -> dict:
         "snowflake_account": "tasuvwl-ih32543",
         "tableau_public": "https://public.tableau.com/app/profile/maf345/vizzes",
     }
+
+
+def pd_ts(value):
+    import pandas as pd
+
+    return pd.to_datetime(value)
 
 
 def pd_isna(value) -> bool:

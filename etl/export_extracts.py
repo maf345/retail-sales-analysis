@@ -7,7 +7,7 @@ import pandas as pd
 
 from etl.config import EXTRACTS_DIR
 
-SKIP = {"dq_parse_issues"}
+SKIP = {"dq_parse_issues", "dq_formula_check", "dq_orphan_item_count"}
 
 
 def export_extracts(mart: dict[str, pd.DataFrame]) -> list[Path]:
@@ -24,7 +24,7 @@ def export_extracts(mart: dict[str, pd.DataFrame]) -> list[Path]:
     compact = {
         "kpi": mart["mart_kpi_snapshot"],
         "member_guest": mart["mart_member_vs_guest"],
-        "monthly_growth": mart["mart_monthly_growth"],
+        "monthly_growth": _with_period(mart["mart_monthly_growth"]),
         "discount_band": mart["mart_discount_band"],
         "market_basket": mart["mart_market_basket"],
         "dim_store": mart["dim_store"],
@@ -52,6 +52,16 @@ def export_extracts(mart: dict[str, pd.DataFrame]) -> list[Path]:
             _for_csv(df).to_excel(writer, sheet_name=sheet[:31], index=False)
     written.append(xlsx)
     return written
+
+
+def _with_period(monthly: pd.DataFrame) -> pd.DataFrame:
+    out = monthly.copy()
+    out["PERIOD"] = (
+        out["YEAR"].astype(int).astype(str)
+        + "-"
+        + out["MONTH"].astype(int).astype(str).str.zfill(2)
+    )
+    return out
 
 
 def _rfm_summary(rfm: pd.DataFrame) -> pd.DataFrame:

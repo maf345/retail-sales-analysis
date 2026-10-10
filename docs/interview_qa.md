@@ -51,6 +51,10 @@ Member with no purchase in the **90 days** before the snapshot date (max `SALE_D
 
 ~55.6% of headers have no basket (`Sale_ID` only 100000–126666 in the items file). **Do not drop them.** Header KPIs stay; product/basket KPIs filter `HAS_LINE_ITEMS`. This is an ops finding about the items feed.
 
+## Where the database is
+
+`.env` holds the password (never chat, never git). `etl/load_snowflake.py` creates `RETAIL_SALES` and runs `sql/01` through `sql/04`. The reviewer database is that Snowflake mart. Tableau is built by hand against `RETAIL_SALES.MART` (see `docs/tableau_publish.md`).
+
 ## Tableau Public vs Snowflake
 
 Tableau Public cannot live-connect to Snowflake. Production: Tableau Desktop on `RETAIL_SALES.MART`. Interview publish: `extracts/` CSVs and `tableau_public_pack.xlsx` → [public profile](https://public.tableau.com/app/profile/maf345/vizzes).

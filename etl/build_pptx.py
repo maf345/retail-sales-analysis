@@ -4,23 +4,23 @@ from __future__ import annotations
 from pathlib import Path
 
 from pptx import Presentation
-from pptx.dml.color import RgbColor
+from pptx.dml.color import RGBColor
 from pptx.enum.shapes import MSO_AUTO_SHAPE_TYPE
 from pptx.enum.text import PP_ALIGN
 from pptx.util import Emu, Inches, Pt
 
 from etl.config import ROOT
 
-NAVY = RgbColor(0x0B, 0x1F, 0x3A)
-TEAL = RgbColor(0x1F, 0x7A, 0x8C)
-GOLD = RgbColor(0xC4, 0x8B, 0x2F)
-WHITE = RgbColor(0xFF, 0xFF, 0xFF)
-DARK = RgbColor(0x1A, 0x1A, 0x1A)
-GRAY = RgbColor(0x5A, 0x5A, 0x5A)
-LIGHT = RgbColor(0xF4, 0xF1, 0xEA)
+NAVY = RGBColor(0x0B, 0x1F, 0x3A)
+TEAL = RGBColor(0x1F, 0x7A, 0x8C)
+GOLD = RGBColor(0xC4, 0x8B, 0x2F)
+WHITE = RGBColor(0xFF, 0xFF, 0xFF)
+DARK = RGBColor(0x1A, 0x1A, 0x1A)
+GRAY = RGBColor(0x5A, 0x5A, 0x5A)
+LIGHT = RGBColor(0xF4, 0xF1, 0xEA)
 
 
-def build_pptx(findings: dict) -> Path:
+def build_pptx(findings: dict, charts: dict | None = None) -> Path:
     prs = Presentation()
     prs.slide_width = Inches(13.333)
     prs.slide_height = Inches(7.5)
@@ -30,11 +30,12 @@ def build_pptx(findings: dict) -> Path:
     _architecture(prs)
     _elt_star(prs)
     _incremental_json(prs)
-    _dq(prs, findings)
-    _sales(prs, findings)
+    charts = charts or {}
+    _dq(prs, findings, charts)
+    _sales(prs, findings, charts)
     _churn(prs, findings)
-    _product(prs, findings)
-    _ops(prs, findings)
+    _product(prs, findings, charts)
+    _ops(prs, findings, charts)
     _tableau(prs, findings)
     _close(prs, findings)
 
@@ -295,13 +296,14 @@ def _money(n: float) -> str:
     return f" ${n:,.2f}"
 
 
-def _dq(prs, f):
+def _dq(prs, f, charts=None):
     s = _blank(prs)
     _bar(s)
     _text(s, "Data quality: treat the feed as a product", 0.5, 0.4, 12, 0.5, 26, NAVY, bold=True)
     cov = f["kpi"]["item_coverage_pct"]
     _kpi_card(s, 0.5, 1.15, "ITEM COVERAGE", f"{cov:.1%}", "Headers with a basket")
-    _kpi_card(s, 3.6, 1.15, "PRICE / QTY / %", "~2,800", "Dirty strings parsed in staging")
+    dirty = sum(int(r.get("row_count", 0)) for r in f.get("parse_issues", []))
+    _kpi_card(s, 3.6, 1.15, "PRICE / QTY / %", f"{dirty:,}", "Dirty cells parsed in staging")
     _kpi_card(s, 6.7, 1.15, "GUEST KEYS", "NULL", "Never fabricate a customer")
     _kpi_card(s, 9.8, 1.15, "CASHIER", "1 : 1 store", "Not independent performance")
     _bullets(
@@ -313,20 +315,24 @@ def _dq(prs, f):
             "Gender = Unknown (569) is kept as its own segment.",
         ],
         0.6,
-        2.9,
+        2.75,
         12,
-        3.8,
-        16,
+        1.55,
+        13,
     )
+    feed = (charts or {}).get("feed")
+    if feed:
+        s.shapes.add_picture(str(feed), Inches(0.45), Inches(4.35), Inches(12.3), Inches(2.55))
     _footer(s, "06")
 
 
-def _sales(prs, f):
+def _sales(prs, f, charts=None):
     s = _blank(prs)
     _bar(s)
     _text(s, "Sales performance", 0.5, 0.4, 12, 0.5, 26, NAVY, bold=True)
     k = f["kpi"]
-    _kpi_card(s, 0.5, 1.1, "TRANSACTIONS", f"{k['txn_count']:,}", "6 stores  ·  Jan 2025–Jun 2026")
+    span = f"{f.get('sale_date_min', '')} – {f.get('sale_date_max', '')}".strip(" –")
+    _kpi_card(s, 0.5, 1.1, "TRANSACTIONS", f"{k['txn_count']:,}", f"{k['stores']} stores  ·  {span}")
     _kpi_card(s, 3.6, 1.1, "REVENUE (WITH ITEMS)", _money(k["revenue_with_items"]).strip(), "Headers without lines excluded")
     _kpi_card(s, 6.7, 1.1, "AVG BASKET", _money(k["avg_basket_value"]).strip(), f"{k['avg_basket_size']:.1f} units")
     _kpi_card(
@@ -337,14 +343,10 @@ def _sales(prs, f):
         f"{k['member_txns']:,} / {k['guest_txns']:,}",
         "Txn mix",
     )
-    store_lines = []
-    for row in f["stores"][:6]:
-        store_lines.append(
-            f"{row['STORE_NAME']} ({row['REGION']})  ·  {row['CASHIER_NAME']}  ·  "
-            f"{_money(row['REVENUE']).strip()}  ·  {int(row['TXN']):,} txn"
-        )
-    _text(s, "Store = cashier in this extract", 0.5, 2.75, 12, 0.35, 16, TEAL, bold=True)
-    _bullets(s, store_lines, 0.5, 3.15, 12, 3.6, 14)
+    _text(s, "Store = cashier in this extract. Rank stores, not people.", 0.5, 2.7, 12, 0.3, 14, TEAL, bold=True)
+    picture = (charts or {}).get("stores")
+    if picture:
+        s.shapes.add_picture(str(picture), Inches(0.45), Inches(3.05), Inches(12.3), Inches(3.9))
     _footer(s, "07")
 
 
@@ -360,9 +362,9 @@ def _churn(prs, f):
     _bullets(
         s,
         [
-            "Definition: Member with no purchase in the 90 days before snapshot (max sale date). Guests cannot churn.",
-            "CLV proxy = frequency × average order value (item-covered baskets only where value exists).",
-            "Action: win-back the 90-day dormant high-M RFM band; do not blast guests.",
+            "Definition: Member with no purchase in the 90 days before the snapshot (max sale date). Guests cannot churn.",
+            "Members buy about 2.4 times in 18 months, so a flat 90-day rule flags most of them. Win back the high-monetary band only.",
+            "Dollar value is item revenue. Tickets with no lines add a visit but $0, so CLV is understated until the items feed is fixed.",
             "RFM quintiles are in mart_customer_rfm for the dashboard.",
         ],
         0.6,
@@ -374,23 +376,23 @@ def _churn(prs, f):
     _footer(s, "08")
 
 
-def _product(prs, f):
+def _product(prs, f, charts=None):
     s = _blank(prs)
     _bar(s)
     _text(s, "Assortment, discount, frequently bought together", 0.5, 0.4, 12, 0.5, 26, NAVY, bold=True)
-    tops = [f"{r['PRODUCT_NAME']}  ·  {r['CATEGORY']}  ·  {_money(r['REVENUE']).strip()}" for r in f["top_products"]]
-    _text(s, "Top products by revenue (item-covered sales)", 0.5, 1.1, 7, 0.35, 16, TEAL, bold=True)
-    _bullets(s, tops, 0.5, 1.5, 7, 2.4, 14)
+    picture = (charts or {}).get("products")
+    if picture:
+        s.shapes.add_picture(str(picture), Inches(0.35), Inches(1.05), Inches(8.1), Inches(5.7))
     pairs = [
         f"{r['PRODUCT_A_NAME']} + {r['PRODUCT_B_NAME']}  ·  lift {r['LIFT']:.2f}"
-        for r in f["basket_pairs"][:4]
+        for r in f["basket_pairs"][:5]
     ]
-    _text(s, "Highest-lift pairs (complete baskets)", 0.5, 4.0, 12, 0.35, 16, TEAL, bold=True)
-    _bullets(s, pairs or ["No pairs"], 0.5, 4.4, 12, 2.2, 14)
+    _text(s, "Highest-lift pairs", 8.5, 1.15, 4.4, 0.4, 16, TEAL, bold=True)
+    _bullets(s, pairs or ["No pairs"], 8.5, 1.7, 4.4, 5.0, 14)
     _footer(s, "09")
 
 
-def _ops(prs, f):
+def _ops(prs, f, charts=None):
     s = _blank(prs)
     _bar(s)
     _text(s, "Time, payment, unusual activity", 0.5, 0.4, 12, 0.5, 26, NAVY, bold=True)
@@ -409,20 +411,9 @@ def _ops(prs, f):
     mom_s = "n/a" if mom is None else f"{mom:.1%}"
     _kpi_card(s, 6.7, 1.15, "LAST MONTH MoM", mom_s, f"{last['year']}-{last['month']:02d}")
     _kpi_card(s, 9.8, 1.15, "PAYMENTS", "3-way split", "Cash / Debit / Credit roughly even")
-    _bullets(
-        s,
-        [
-            "Hours run 07:00–22:00 only — staffing model, not 24-hour demand.",
-            "Payment mix is almost equal; contribution is volume, not a dominant tender.",
-            "Member vs guest AOV is on the mart_member_vs_guest extract — use it, do not average guests into churn.",
-            "YTD / MTD / QTD sit in mart_time_intel for the time-intelligence sheet.",
-        ],
-        0.6,
-        2.9,
-        12,
-        3.8,
-        16,
-    )
+    picture = (charts or {}).get("hourly")
+    if picture:
+        s.shapes.add_picture(str(picture), Inches(0.45), Inches(2.8), Inches(12.3), Inches(4.1))
     _footer(s, "10")
 
 

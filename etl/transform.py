@@ -49,7 +49,11 @@ def stage_sales(raw: pd.DataFrame) -> pd.DataFrame:
         "_LOAD_DATE",
         "_FILE_NAME",
     ]
-    return df[keep].drop_duplicates("SALE_ID", keep="last")
+    return (
+        df[keep]
+        .sort_values(["UPDATE_TS", "_LOAD_DATE"], na_position="first")
+        .drop_duplicates("SALE_ID", keep="last")
+    )
 
 
 def stage_items(raw: pd.DataFrame) -> pd.DataFrame:
@@ -78,13 +82,22 @@ def stage_items(raw: pd.DataFrame) -> pd.DataFrame:
         "_LOAD_DATE",
         "_FILE_NAME",
     ]
-    return df[keep].drop_duplicates("ITEM_ID", keep="last")
+    return (
+        df[keep]
+        .sort_values(["UPDATE_TS", "_LOAD_DATE"], na_position="first")
+        .drop_duplicates("ITEM_ID", keep="last")
+    )
 
 
 def stage_customers(raw: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Full-snapshot merge: newest load of each customer document wins."""
+    latest = (
+        raw.sort_values(["_LOAD_DATE", "_INGESTED_AT"], na_position="first")
+        .drop_duplicates("CUSTOMER_ID", keep="last")
+    )
     customers = []
     phones = []
-    for _, row in raw.iterrows():
+    for _, row in latest.iterrows():
         payload = json.loads(row["PAYLOAD"])
         customers.append(
             {
@@ -144,9 +157,11 @@ def build_mart(raw: dict[str, pd.DataFrame]) -> dict[str, pd.DataFrame]:
         .reset_index(drop=True)
     )
     dim_payment = sales[["PAYMENT_TYPE"]].drop_duplicates().reset_index(drop=True)
-    active = phones[phones["PHONE_STATUS"] == "Active"][
-        ["CUSTOMER_ID", "PHONE_NO"]
-    ].rename(columns={"PHONE_NO": "ACTIVE_PHONE"})
+    active = (
+        phones[phones["PHONE_STATUS"] == "Active"][["CUSTOMER_ID", "PHONE_NO"]]
+        .drop_duplicates("CUSTOMER_ID", keep="first")
+        .rename(columns={"PHONE_NO": "ACTIVE_PHONE"})
+    )
     dim_customer = customers.merge(active, on="CUSTOMER_ID", how="left")
     dim_customer["AGE_BAND"] = dim_customer["AGE"].map(age_band)
 
@@ -179,12 +194,27 @@ def build_mart(raw: dict[str, pd.DataFrame]) -> dict[str, pd.DataFrame]:
     )
     basket = basket.merge(disc, on="SALE_ID", how="left")
 
-    fact_sales = sales.merge(basket, on="SALE_ID", how="left")
+    fact_sales = sales.drop(
+        columns=["STORE_NAME", "CITY", "STATE", "REGION", "CASHIER_NAME"]
+    ).merge(basket, on="SALE_ID", how="left")
     fact_sales["HAS_LINE_ITEMS"] = fact_sales["LINE_COUNT"].notna()
     fact_sales["SALE_HOUR"] = fact_sales["SALE_TS"].dt.hour
     fact_sales["SALE_DOW"] = fact_sales["SALE_TS"].dt.strftime("%A")
 
-    fact_items = items.merge(
+    orphan_mask = ~items["SALE_ID"].isin(set(sales["SALE_ID"].dropna()))
+    formula = items["UNIT_PRICE_USD"] * items["QUANTITY"] * (1 - items["DISCOUNT_PCT"] / 100.0)
+    formula_gap = (formula - items["TOTAL_VALUE"]).abs()
+    dq_formula = pd.DataFrame(
+        [
+            {
+                "lines": int(len(items)),
+                "formula_mismatch": int((formula_gap > 0.05).fillna(False).sum()),
+                "max_abs_gap": float(formula_gap.max()) if len(items) else 0.0,
+            }
+        ]
+    )
+
+    fact_items = items.drop(columns=["PRODUCT_NAME", "CATEGORY"]).merge(
         sales[
             [
                 "SALE_ID",
@@ -215,6 +245,8 @@ def build_mart(raw: dict[str, pd.DataFrame]) -> dict[str, pd.DataFrame]:
         "fact_sales_items": fact_items,
         **marts,
         "dq_parse_issues": _parse_issue_sample(raw["items"]),
+        "dq_formula_check": dq_formula,
+        "dq_orphan_item_count": int(orphan_mask.sum()),
     }
 
 

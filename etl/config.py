@@ -21,6 +21,7 @@ SNOWFLAKE = {
     "role": os.getenv("SNOWFLAKE_ROLE", "ACCOUNTADMIN"),
 }
 
+SOURCE_DIR = ROOT / "source"
 LANDING_DIR = ROOT / "landing"
 SOURCE_FILES = {
     "sales": "Retail_Sales.xlsx",

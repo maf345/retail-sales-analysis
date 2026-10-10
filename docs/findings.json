@@ -1,0 +1,318 @@
+{
+  "as_of_date": "2026-10-10",
+  "sale_date_min": "2025-01-01",
+  "sale_date_max": "2026-06-30",
+  "parse_issues": [
+    {
+      "issue": "unit_price_dollar_sign",
+      "row_count": 800
+    },
+    {
+      "issue": "quantity_suffix",
+      "row_count": 1200
+    },
+    {
+      "issue": "discount_percent_sign",
+      "row_count": 800
+    }
+  ],
+  "generated_at": "2026-10-10T19:00:08Z",
+  "kpi": {
+    "txn_count": 60000,
+    "revenue_with_items": 2244635.29,
+    "avg_basket_value": 84.17277121535982,
+    "avg_basket_size": 19.551018112273596,
+    "item_coverage_pct": 0.44445,
+    "member_txns": 33043,
+    "guest_txns": 26957,
+    "stores": 6
+  },
+  "member_guest": {
+    "Guest": {
+      "TXN_COUNT": 26957,
+      "STORES": 6,
+      "REVENUE": 1004860.7,
+      "AVG_BASKET_VALUE": 83.77,
+      "AVG_BASKET_SIZE": 19.55,
+      "AVG_LINES": 3.0
+    },
+    "Member": {
+      "TXN_COUNT": 33043,
+      "STORES": 6,
+      "REVENUE": 1239774.59,
+      "AVG_BASKET_VALUE": 84.5,
+      "AVG_BASKET_SIZE": 19.55,
+      "AVG_LINES": 3.0
+    }
+  },
+  "churn": {
+    "members": 13993,
+    "churned_90d": 9371,
+    "churn_rate": 0.6696919888515687,
+    "avg_frequency": 2.3613949832058885,
+    "avg_monetary": 88.59962767097834,
+    "avg_recency": 184.48174087043523
+  },
+  "last_month": {
+    "year": 2026,
+    "month": 6,
+    "revenue": 124167.9,
+    "mom_growth_pct": -0.026033818227712446
+  },
+  "top_products": [
+    {
+      "PRODUCT_NAME": "Coffee Beans (12oz)",
+      "CATEGORY": "Beverages",
+      "REVENUE": 352296.09
+    },
+    {
+      "PRODUCT_NAME": "Paper Towels (6pk)",
+      "CATEGORY": "Household",
+      "REVENUE": 293631.28
+    },
+    {
+      "PRODUCT_NAME": "Frozen Pizza",
+      "CATEGORY": "Frozen",
+      "REVENUE": 240094.89
+    },
+    {
+      "PRODUCT_NAME": "Ground Beef (1lb)",
+      "CATEGORY": "Meat",
+      "REVENUE": 209605.02
+    },
+    {
+      "PRODUCT_NAME": "Sparkling Water (12pk)",
+      "CATEGORY": "Beverages",
+      "REVENUE": 192893.85
+    }
+  ],
+  "bottom_products": [
+    {
+      "PRODUCT_NAME": "Avocados",
+      "CATEGORY": "Produce",
+      "REVENUE": 51915.77
+    },
+    {
+      "PRODUCT_NAME": "Greek Yogurt",
+      "CATEGORY": "Dairy",
+      "REVENUE": 44889.28
+    },
+    {
+      "PRODUCT_NAME": "Organic Bananas",
+      "CATEGORY": "Produce",
+      "REVENUE": 21184.01
+    }
+  ],
+  "stores": [
+    {
+      "STORE_NAME": "Southside Pantry",
+      "REGION": "South",
+      "CASHIER_NAME": "Luis Fernandez",
+      "REVENUE": 379371.43,
+      "TXN": 10126
+    },
+    {
+      "STORE_NAME": "Northpoint Deli",
+      "REGION": "West",
+      "CASHIER_NAME": "Rachel Kim",
+      "REVENUE": 377613.36,
+      "TXN": 9878
+    },
+    {
+      "STORE_NAME": "Uptown Grocers",
+      "REGION": "West",
+      "CASHIER_NAME": "Mike Chen",
+      "REVENUE": 377497.26,
+      "TXN": 10065
+    },
+    {
+      "STORE_NAME": "Downtown Market",
+      "REGION": "West",
+      "CASHIER_NAME": "Karen Lopez",
+      "REVENUE": 371699.57,
+      "TXN": 10063
+    },
+    {
+      "STORE_NAME": "Eastgate Foods",
+      "REGION": "Midwest",
+      "CASHIER_NAME": "Tasha Brooks",
+      "REVENUE": 369551.15,
+      "TXN": 9935
+    },
+    {
+      "STORE_NAME": "Riverside Grocery",
+      "REGION": "South",
+      "CASHIER_NAME": "Diego Alvarez",
+      "REVENUE": 368902.52,
+      "TXN": 9933
+    }
+  ],
+  "peak_hour": {
+    "SALE_DOW": "Sunday",
+    "SALE_HOUR": 10,
+    "TXN_COUNT": 582
+  },
+  "payment": [
+    {
+      "PAYMENT_TYPE": "Cash",
+      "TXN": 19973,
+      "REVENUE": 747478.42
+    },
+    {
+      "PAYMENT_TYPE": "Credit Card",
+      "TXN": 20033,
+      "REVENUE": 756801.74
+    },
+    {
+      "PAYMENT_TYPE": "Debit Card",
+      "TXN": 19994,
+      "REVENUE": 740355.13
+    }
+  ],
+  "basket_pairs": [
+    {
+      "PRODUCT_A": 206,
+      "PRODUCT_B": 208,
+      "PAIR_BASKETS": 831,
+      "PRODUCT_A_NAME": "Frozen Pizza",
+      "PRODUCT_B_NAME": "Greek Yogurt",
+      "SUPPORT": 0.0312,
+      "CONFIDENCE_A_TO_B": 0.1569,
+      "CONFIDENCE_B_TO_A": 0.1546,
+      "LIFT": 0.7785
+    },
+    {
+      "PRODUCT_A": 204,
+      "PRODUCT_B": 212,
+      "PAIR_BASKETS": 822,
+      "PRODUCT_A_NAME": "Ground Beef (1lb)",
+      "PRODUCT_B_NAME": "Chicken Breast (1lb)",
+      "SUPPORT": 0.0308,
+      "CONFIDENCE_A_TO_B": 0.1554,
+      "CONFIDENCE_B_TO_A": 0.1535,
+      "LIFT": 0.7741
+    },
+    {
+      "PRODUCT_A": 203,
+      "PRODUCT_B": 211,
+      "PAIR_BASKETS": 810,
+      "PRODUCT_A_NAME": "White Bread",
+      "PRODUCT_B_NAME": "Paper Towels (6pk)",
+      "SUPPORT": 0.0304,
+      "CONFIDENCE_A_TO_B": 0.1517,
+      "CONFIDENCE_B_TO_A": 0.1535,
+      "LIFT": 0.7667
+    },
+    {
+      "PRODUCT_A": 210,
+      "PRODUCT_B": 213,
+      "PAIR_BASKETS": 833,
+      "PRODUCT_A_NAME": "Coffee Beans (12oz)",
+      "PRODUCT_B_NAME": "Orange Juice (64oz)",
+      "SUPPORT": 0.0312,
+      "CONFIDENCE_A_TO_B": 0.1554,
+      "CONFIDENCE_B_TO_A": 0.1538,
+      "LIFT": 0.7651
+    },
+    {
+      "PRODUCT_A": 204,
+      "PRODUCT_B": 207,
+      "PAIR_BASKETS": 784,
+      "PRODUCT_A_NAME": "Ground Beef (1lb)",
+      "PRODUCT_B_NAME": "Sparkling Water (12pk)",
+      "SUPPORT": 0.0294,
+      "CONFIDENCE_A_TO_B": 0.1483,
+      "CONFIDENCE_B_TO_A": 0.1494,
+      "LIFT": 0.7534
+    }
+  ],
+  "unusual_count": 1308,
+  "discount_revenue": [
+    {
+      "DISCOUNT_BAND": "0%",
+      "REVENUE": 952678.31
+    },
+    {
+      "DISCOUNT_BAND": "5%",
+      "REVENUE": 450751.95
+    },
+    {
+      "DISCOUNT_BAND": "10%",
+      "REVENUE": 435921.08
+    },
+    {
+      "DISCOUNT_BAND": "15%+",
+      "REVENUE": 405283.95
+    }
+  ],
+  "dq": [
+    {
+      "check_name": "sales_pk_unique",
+      "status": "PASS",
+      "detail": "60000 unique / 60000 rows"
+    },
+    {
+      "check_name": "items_pk_unique",
+      "status": "PASS",
+      "detail": "80000 unique / 80000 rows"
+    },
+    {
+      "check_name": "customer_pk_unique",
+      "status": "PASS",
+      "detail": "13993 customers"
+    },
+    {
+      "check_name": "items_without_header",
+      "status": "PASS",
+      "detail": "0 item rows whose Sale_ID is not on a header"
+    },
+    {
+      "check_name": "total_value_matches_formula",
+      "status": "PASS",
+      "detail": "0 lines differ from price * qty * (1 - discount) by more than $0.05 (max gap 0.0050)"
+    },
+    {
+      "check_name": "headers_missing_line_items",
+      "status": "WARN",
+      "detail": "33,333 sales (55.6%) have no basket rows \u2014 keep as ops KPI, do not drop"
+    },
+    {
+      "check_name": "member_always_has_customer_id",
+      "status": "PASS",
+      "detail": "null member keys=0"
+    },
+    {
+      "check_name": "guest_never_has_customer_id",
+      "status": "PASS",
+      "detail": "guest keys present=0"
+    },
+    {
+      "check_name": "members_match_customer_dim",
+      "status": "PASS",
+      "detail": "unmatched members=0; unused customers=0"
+    },
+    {
+      "check_name": "unit_price_dollar_sign",
+      "status": "WARN",
+      "detail": "800 raw rows cleaned in staging"
+    },
+    {
+      "check_name": "quantity_suffix",
+      "status": "WARN",
+      "detail": "1200 raw rows cleaned in staging"
+    },
+    {
+      "check_name": "discount_percent_sign",
+      "status": "WARN",
+      "detail": "800 raw rows cleaned in staging"
+    },
+    {
+      "check_name": "cashier_one_to_one_store",
+      "status": "WARN",
+      "detail": "Each cashier maps to exactly one store in this extract \u2014 report as store performance"
+    }
+  ],
+  "snowflake_account": "tasuvwl-ih32543",
+  "tableau_public": "https://public.tableau.com/app/profile/maf345/vizzes",
+  "snowflake_status": "Snowflake RAW + MART rebuilt successfully"
+}

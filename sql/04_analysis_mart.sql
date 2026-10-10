@@ -2,11 +2,9 @@
 USE DATABASE RETAIL_SALES;
 USE SCHEMA MART;
 
-SET SNAPSHOT_DATE = (SELECT MAX(SALE_DATE) FROM MART.FACT_SALES);
-
 CREATE OR REPLACE TABLE MART.MART_KPI_SNAPSHOT AS
 SELECT
-    $SNAPSHOT_DATE                                                  AS SNAPSHOT_DATE,
+    (SELECT MAX(SALE_DATE) FROM MART.FACT_SALES)                    AS SNAPSHOT_DATE,
     COUNT(*)                                                        AS TXN_COUNT,
     COUNT(DISTINCT STORE_ID)                                        AS STORE_COUNT,
     SUM(IFF(HAS_LINE_ITEMS, BASKET_VALUE, 0))                       AS REVENUE_WITH_ITEMS,
@@ -106,19 +104,23 @@ JOIN MART.DIM_PRODUCT P ON I.PRODUCT_ID = P.PRODUCT_ID
 GROUP BY 1,2;
 
 CREATE OR REPLACE TABLE MART.MART_CUSTOMER_RFM AS
-WITH BASE AS (
+WITH SNAP AS (
+    SELECT MAX(SALE_DATE) AS SNAPSHOT_DATE FROM MART.FACT_SALES
+),
+BASE AS (
     SELECT
-        CUSTOMER_ID,
+        F.CUSTOMER_ID,
         COUNT(*)                                                    AS FREQUENCY,
-        SUM(COALESCE(BASKET_VALUE, 0))                              AS MONETARY,
-        MAX(SALE_DATE)                                              AS LAST_PURCHASE_DATE,
-        MIN(SALE_DATE)                                              AS FIRST_PURCHASE_DATE,
-        DATEDIFF('DAY', MAX(SALE_DATE), $SNAPSHOT_DATE)             AS RECENCY_DAYS,
-        DATEDIFF('DAY', MIN(SALE_DATE), MAX(SALE_DATE))             AS TENURE_DAYS
-    FROM MART.FACT_SALES
-    WHERE CUSTOMER_TYPE = 'Member'
-      AND CUSTOMER_ID IS NOT NULL
-    GROUP BY CUSTOMER_ID
+        SUM(COALESCE(F.BASKET_VALUE, 0))                            AS MONETARY,
+        MAX(F.SALE_DATE)                                            AS LAST_PURCHASE_DATE,
+        MIN(F.SALE_DATE)                                            AS FIRST_PURCHASE_DATE,
+        DATEDIFF('DAY', MAX(F.SALE_DATE), MAX(S.SNAPSHOT_DATE))    AS RECENCY_DAYS,
+        DATEDIFF('DAY', MIN(F.SALE_DATE), MAX(F.SALE_DATE))         AS TENURE_DAYS
+    FROM MART.FACT_SALES F
+    CROSS JOIN SNAP S
+    WHERE F.CUSTOMER_TYPE = 'Member'
+      AND F.CUSTOMER_ID IS NOT NULL
+    GROUP BY F.CUSTOMER_ID
 )
 SELECT
     B.*,

@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from etl.config import LANDING_DIR, ROOT, SOURCE_FILES
+from etl.config import LANDING_DIR, SOURCE_DIR, SOURCE_FILES
 
 
 def resolve_as_of_date(as_of_date: str | None) -> str:
@@ -28,9 +28,9 @@ def prepare_landing(as_of_date: str) -> Path:
     dest = LANDING_DIR / as_of_date
     dest.mkdir(parents=True, exist_ok=True)
     mapping = {
-        SOURCE_FILES["sales"]: ROOT / "Retail_Sales.xlsx",
-        SOURCE_FILES["items"]: ROOT / "Retail_Items.xlsx",
-        SOURCE_FILES["customers"]: ROOT / "Customers.json",
+        SOURCE_FILES["sales"]: SOURCE_DIR / "Retail_Sales.xlsx",
+        SOURCE_FILES["items"]: SOURCE_DIR / "Retail_Items.xlsx",
+        SOURCE_FILES["customers"]: SOURCE_DIR / "Customers.json",
     }
     for name, src in mapping.items():
         target = dest / name

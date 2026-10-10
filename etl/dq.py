@@ -1,7 +1,7 @@
 """Data-quality checks written to docs/dq_log.md and RAW.LOAD_LOG."""
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 import pandas as pd
@@ -35,13 +35,21 @@ def run_dq(raw: dict[str, pd.DataFrame], mart: dict[str, pd.DataFrame]) -> pd.Da
         "PASS" if customers["CUSTOMER_ID"].is_unique else "FAIL",
         f"{customers['CUSTOMER_ID'].nunique()} customers",
     )
-    orphan_items = (~raw_sale_ids_match(raw)).sum() if False else 0
     item_sales = set(items["SALE_ID"].dropna().astype(int))
     header_sales = set(sales["SALE_ID"].dropna().astype(int))
+    orphan_n = int(mart.get("dq_orphan_item_count", 0))
     add(
         "items_without_header",
-        "PASS" if len(item_sales - header_sales) == 0 else "FAIL",
-        f"{len(item_sales - header_sales)} orphan sale ids",
+        "PASS" if orphan_n == 0 else "FAIL",
+        f"{orphan_n} item rows whose Sale_ID is not on a header",
+    )
+    formula = mart["dq_formula_check"].iloc[0]
+    mismatch = int(formula["formula_mismatch"])
+    add(
+        "total_value_matches_formula",
+        "PASS" if mismatch == 0 else "WARN",
+        f"{mismatch} lines differ from price * qty * (1 - discount) by more than $0.05 "
+        f"(max gap {formula['max_abs_gap']:.4f})",
     )
     missing_lines = len(header_sales - item_sales)
     pct = 1 - sales["HAS_LINE_ITEMS"].mean()
@@ -81,10 +89,6 @@ def run_dq(raw: dict[str, pd.DataFrame], mart: dict[str, pd.DataFrame]) -> pd.Da
     return pd.DataFrame(checks)
 
 
-def raw_sale_ids_match(raw):
-    return pd.Series(dtype=bool)
-
-
 def write_dq_log(checks: pd.DataFrame, as_of_date: str) -> Path:
     DOCS_DIR.mkdir(parents=True, exist_ok=True)
     path = DOCS_DIR / "dq_log.md"
@@ -92,7 +96,7 @@ def write_dq_log(checks: pd.DataFrame, as_of_date: str) -> Path:
         "# Data quality log",
         "",
         f"Load date: **{as_of_date}**",
-        f"Generated: {datetime.utcnow().strftime('%Y-%m-%d %H:%M UTC')}",
+        f"Generated: {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}",
         "",
         "| Check | Status | Detail |",
         "|---|---|---|",

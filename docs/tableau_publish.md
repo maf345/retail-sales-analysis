@@ -1,6 +1,8 @@
 # Build the Tableau workbook by hand
 
-The reviewer expects the dashboard connected to Snowflake `RETAIL_SALES.MART`. Nothing in this repo draws the Tableau charts for you. Use Tableau Desktop (the product that can log into Snowflake). Tableau Public cannot connect live to Snowflake.
+**Short on time?** Use Tableau Public + `extracts/tableau_public_pack.xlsx` and follow **[tableau_public_deadline_plan.md](tableau_public_deadline_plan.md)** (must-have vs good-to-have dashboards).
+
+The reviewer expects the dashboard connected to Snowflake `RETAIL_SALES.MART` in production. Nothing in this repo draws the charts for you. **Tableau Desktop** can live-query Snowflake. **Tableau Public** cannot — use the Excel pack above and say so in the deck.
 
 Anyone with the `.env` password, this repo, and Tableau Desktop can follow the same steps.
 
@@ -47,34 +49,46 @@ Use `FACT_SALES` for header KPIs (one row per ticket). Use `FACT_SALES_ITEMS` fo
 
 If Desktop is not available, connect Tableau Public to `extracts/tableau_public_pack.xlsx` instead. Say in the presentation that live Snowflake is the production path and the Excel file is only the publish fallback.
 
+### Add the summary tables (required for step 3)
+
+Most measures are **not** on `FACT_SALES`. They are pre-built columns on **`MART_*` tables**.
+
+1. In the left **Database** pane, open **MART**.
+2. **Double-click** each table you need (at minimum: `MART_KPI_SNAPSHOT`, `MART_MONTHLY_GROWTH`, `MART_TIME_INTEL`, `MART_HOURLY_DOW`, `MART_MEMBER_VS_GUEST`, `MART_CUSTOMER_RFM`, `MART_PRODUCT_PERF`, `MART_DISCOUNT_BAND`, `MART_MARKET_BASKET`, `MART_FEED_COMPLETENESS`, `MART_UNUSUAL_TXN`, plus `FACT_SALES` for payment mix).
+3. For each **sheet**, use fields from **one** table only (ignore “not related” warnings between tables).
+
+**Exact Snowflake column names, table by table:** see **[tableau_fields_reference.md](tableau_fields_reference.md)**.
+
+There is **no** `PERIOD` column in Snowflake. Use `YEAR` + `MONTH` on `MART_MONTHLY_GROWTH`, or `MONTH_NAME` on `MART_DAILY_SALES`.
+
 ## 3. Sheets to create
 
-Create one sheet per row. Put dimensions on Rows or Columns and measures on the other shelf. Set the mark type in the Marks card.
+Create one sheet per row. Names below are **Snowflake columns** (search in Data pane with that spelling).
 
-| Sheet | Rows / columns | Measure | Mark | Filter |
+| Sheet | Snowflake table | Dimensions (Rows/Columns) | Measures (green) | Mark |
 | --- | --- | --- | --- | --- |
-| KPI | — | `TXN_COUNT`, `REVENUE_WITH_ITEMS`, `AVG_BASKET_VALUE`, `AVG_BASKET_SIZE`, `ITEM_COVERAGE_PCT` from `MART_KPI_SNAPSHOT` | Text / BAN | none |
-| Revenue by month | `PERIOD` or `DIM_DATE` month | `BASKET_VALUE` (or `REVENUE` on `MART_MONTHLY_GROWTH`) | Line | `HAS_LINE_ITEMS` = true for dollar revenue |
-| MoM growth | month | `MOM_GROWTH_PCT` on `MART_MONTHLY_GROWTH` | Bar | none |
-| YTD / MTD / QTD | `SALE_DATE` | `YTD_REVENUE`, `MTD_REVENUE`, `QTD_REVENUE` on `MART_TIME_INTEL` | Line | none |
-| Store performance | `STORE_NAME`, `REGION`, `CASHIER_NAME` | `SUM(BASKET_VALUE)`, `COUNT(SALE_ID)` | Bar | none |
-| Hour and weekday | `SALE_DOW`, `SALE_HOUR` | `COUNT(SALE_ID)` | Heat map (square + color) | none |
-| Member vs guest | `CUSTOMER_TYPE` | revenue, average basket, transaction count from `MART_MEMBER_VS_GUEST` | Bar | none |
-| Churn | `IS_CHURNED_90D` | `COUNT(CUSTOMER_ID)` from `MART_CUSTOMER_RFM` | Bar | members only; this table already excludes guests |
-| RFM | `R_SCORE`, `F_SCORE`, `M_SCORE` | `COUNT(CUSTOMER_ID)`, `SUM(MONETARY)` | Highlight table | `IS_CHURNED_90D` = true when you talk about win-back |
-| Product revenue | `PRODUCT_NAME`, `CATEGORY` | `SUM(TOTAL_VALUE)`, `SUM(QUANTITY)` | Bar | item fact only |
-| Discount bands | `DISCOUNT_BAND`, `CATEGORY` | revenue and units from `MART_DISCOUNT_BAND` | Bar | none |
-| Baskets bought together | `PRODUCT_A_NAME`, `PRODUCT_B_NAME` | `LIFT`, `PAIR_BASKETS` from `MART_MARKET_BASKET` | Bar, sort by lift | none |
-| Payment mix | `PAYMENT_TYPE` | `SUM(BASKET_VALUE)`, `COUNT(SALE_ID)` | Pie or bar | none |
-| Feed completeness | month | `ITEM_COVERAGE_PCT` from `MART_FEED_COMPLETENESS` | Line | none |
-| Unusual tickets | `SALE_ID` | `BASKET_VALUE`, `VALUE_ZSCORE` from `MART_UNUSUAL_TXN` | Table | none |
+| KPI | `MART_KPI_SNAPSHOT` | — | `TXN_COUNT`, `REVENUE_WITH_ITEMS`, `AVG_BASKET_VALUE`, `AVG_BASKET_SIZE`, `ITEM_COVERAGE_PCT` | Text |
+| Revenue by month | `MART_MONTHLY_GROWTH` | `MONTH`, `YEAR` | `REVENUE` (SUM) | Line |
+| MoM growth | `MART_MONTHLY_GROWTH` | `MONTH`, `YEAR` | `MOM_GROWTH_PCT` | Bar |
+| YTD / MTD / QTD | `MART_TIME_INTEL` | `SALE_DATE` | `YTD_REVENUE`, `MTD_REVENUE`, `QTD_REVENUE` (do not double-SUM; see field guide) | Line |
+| Store performance | `MART_DAILY_SALES` or `FACT_SALES`+`DIM_STORE` | `STORE_NAME`, `REGION` | `REVENUE` or `SUM(BASKET_VALUE)`, `TXN_COUNT` or `COUNT(SALE_ID)` | Bar |
+| Hour and weekday | `MART_HOURLY_DOW` | `SALE_DOW`, `SALE_HOUR` | `TXN_COUNT` (SUM) | Square (heatmap) |
+| Member vs guest | `MART_MEMBER_VS_GUEST` | `CUSTOMER_TYPE` | `REVENUE`, `TXN_COUNT`, `AVG_BASKET_VALUE` | Bar |
+| Churn | `MART_CUSTOMER_RFM` | `IS_CHURNED_90D` | `COUNT(CUSTOMER_ID)` | Bar |
+| RFM | `MART_CUSTOMER_RFM` | `R_SCORE`, `F_SCORE` | `M_SCORE` (color), `COUNT(CUSTOMER_ID)`, `SUM(MONETARY)` | Square / text |
+| Product revenue | `MART_PRODUCT_PERF` | `PRODUCT_NAME`, `CATEGORY` | `REVENUE`, `UNITS` (SUM) | Bar |
+| Discount bands | `MART_DISCOUNT_BAND` | `DISCOUNT_BAND`, `CATEGORY` | `REVENUE`, `UNITS` | Bar |
+| Basket pairs | `MART_MARKET_BASKET` | `PRODUCT_A_NAME`, `PRODUCT_B_NAME` | `LIFT`, `PAIR_BASKETS` | Bar |
+| Payment mix | `FACT_SALES` | `PAYMENT_TYPE` | `SUM(BASKET_VALUE)`, `COUNT(SALE_ID)` | Pie / bar |
+| Feed completeness | `MART_FEED_COMPLETENESS` | `SALE_DATE` (month) | `AVG(ITEM_COVERAGE_PCT)` | Line |
+| Unusual tickets | `MART_UNUSUAL_TXN` | `SALE_ID` | `BASKET_VALUE`, `VALUE_ZSCORE` | Table |
 
-Calculated fields worth adding on `FACT_SALES`:
+Only if you skip `MART_*` tables and use facts only — create calculated fields on `FACT_SALES`:
 
-- Revenue for product views: already on the item fact as `TOTAL_VALUE`.
-- Coverage: `SUM(IIF([HAS_LINE_ITEMS], 1, 0)) / COUNT([SALE_ID])`.
+- `SUM(IIF([HAS_LINE_ITEMS], 1, 0)) / COUNT([SALE_ID])` for coverage
+- Product lines: `SUM([TOTAL_VALUE])` on `FACT_SALES_ITEMS`, not `BASKET_VALUE`
 
-Format currency as dollars and coverage as a percent.
+Format currency as dollars and `ITEM_COVERAGE_PCT` / `MOM_GROWTH_PCT` as percent.
 
 ## 4. Dashboards
 

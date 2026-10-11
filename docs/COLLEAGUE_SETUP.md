@@ -64,6 +64,8 @@ Cursor is not involved.
 
 ## Submission zip (align with the brief)
 
+Final Tableau scope: **Executive** + **Members & churn** dashboards on Tableau Public — see [DASHBOARD_SCOPE.md](DASHBOARD_SCOPE.md).
+
 Include at least:
 
 | Item | Location |
@@ -73,7 +75,8 @@ Include at least:
 | Source + landing pattern | `source/`, `landing/` |
 | DQ + dictionary + notes | `docs/` |
 | Deck | `Retail_Sales_Analysis_Onsite_Deck.pptx` |
-| Tableau workbook | `tableau/` (after you build it) |
+| Tableau workbook + Public URL | `tableau/*.twbx` and publish link |
+| Excel pack (same as Public) | `extracts/tableau_public_pack.xlsx` |
 | How to run | `README.md` |
 
 Do **not** zip `.env`, `.venv/`, or `data/`.

@@ -32,6 +32,6 @@ Account `tasuvwl-ih32543`, user `MAF345`, warehouse `COMPUTE_WH`, database `RETA
 
 Re-running the same date replaces that date's raw rows. A new folder `landing/2026-10-11/` is the next day's drop. Newer `Update_Date` wins.
 
-Tableau steps: [docs/tableau_publish.md](docs/tableau_publish.md).
+Tableau Public (submitted): two dashboards — [docs/DASHBOARD_SCOPE.md](docs/DASHBOARD_SCOPE.md). Build notes: [docs/tableau_public_deadline_plan.md](docs/tableau_public_deadline_plan.md). Snowflake Desktop path: [docs/tableau_publish.md](docs/tableau_publish.md).
 
 Another machine (no Cursor): [docs/COLLEAGUE_SETUP.md](docs/COLLEAGUE_SETUP.md).

@@ -62,7 +62,7 @@ Header KPIs use `FACT_SALES`. Product, discount, and basket KPIs use rows where 
 | `MART_KPI_SNAPSHOT` | Executive totals at max sale date |
 | `MART_DAILY_SALES` | Store / region / member / payment by day |
 | `MART_TIME_INTEL` | YTD, MTD, QTD, prior-day revenue |
-| `MART_MONTHLY_GROWTH` | Month revenue and MoM growth (Python mart and CSV) |
+| `MART_MONTHLY_GROWTH` | Month revenue and MoM growth (`YEAR`, `MONTH`, `REVENUE`, `MOM_GROWTH_PCT`) |
 | `MART_HOURLY_DOW` | Weekday × hour |
 | `MART_PRODUCT_PERF` | Product revenue, units, discount |
 | `MART_DISCOUNT_BAND` | 0% / 5% / 10% / 15%+ by category |
